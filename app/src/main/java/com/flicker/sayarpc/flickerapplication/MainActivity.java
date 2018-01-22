@@ -3,6 +3,7 @@ package com.flicker.sayarpc.flickerapplication;
 import android.app.ProgressDialog;
 import android.app.SearchManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.AsyncTask;
@@ -15,13 +16,12 @@ import android.support.v7.widget.GridLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.SearchView;
 import android.support.v7.widget.Toolbar;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -41,14 +41,14 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import es.dmoral.toasty.Toasty;
 
 public class MainActivity extends AppCompatActivity implements RecyclerViewAdapter.PhotoAdapterListener {
 
-
-    GridLayoutManager lLayout;
     Context context;
     private SearchView searchView;
     protected boolean doubleBackToExitPressedOnce = false;
@@ -56,12 +56,9 @@ public class MainActivity extends AppCompatActivity implements RecyclerViewAdapt
     String url;
     SwipeRefreshLayout swipeRefreshLayout;
     ProgressDialog progressDialog;
-    List<ItemObject> rowListItem;
-    RecyclerView.LayoutManager layoutManager;
+    List<ItemObject> rowListItem,rowListItemCopy;
+    private GridLayoutManager  layoutManager;
     RecyclerViewAdapter rcAdapter;
-    private boolean loading = true;
-    int pastVisibleItems, visibleItemCount, totalItemCount;
-    int page=1;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
 
@@ -73,19 +70,32 @@ public class MainActivity extends AppCompatActivity implements RecyclerViewAdapt
 
         setSupportActionBar(toolbar);
         //getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        url="https://api.flickr.com/services/rest/?method=flickr.interestingness.getList&api_key=9f89151d82e427401680cd48dd2d5cf5&per_page=30&page=1&format=json&nojsoncallback=1";
         getSupportActionBar().setTitle("Flicker App");
         progressDialog=new ProgressDialog(this);
         context = getApplicationContext();
         swipeRefreshLayout=findViewById(R.id.swipeRefresh);
-        url="https://api.flickr.com/services/rest/?method=flickr.interestingness.getList&api_key=9f89151d82e427401680cd48dd2d5cf5&per_page=30&page=1&format=json&nojsoncallback=1";
-         rowListItem= new ArrayList<>();
         rView= (ShimmerRecyclerView)findViewById(R.id.recycler_view1);
+        rowListItem= new ArrayList<>();
+        rowListItem.clear();
+        rowListItemCopy=new ArrayList<>();
+        layoutManager= new GridLayoutManager(getApplicationContext(),2);
+        if(MainActivity.this.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT){
+            rView.setLayoutManager(new GridLayoutManager(context, 2));
+        }
+        else{
+            rView.setLayoutManager(new GridLayoutManager(context, 4));
+        }
+        rView.setHasFixedSize(false);
+        rView.setLayoutManager(layoutManager);
+        rcAdapter = new RecyclerViewAdapter(context, rowListItem,this);
+        rView.setAdapter(rcAdapter);
+
 
         swipeRefreshLayout.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
             @Override
             public void onRefresh() {
                 if (InternetReceiver.isConnected()){
-                    loading = true;
                     new FetchPhotos(url).execute();
                     swipeRefreshLayout.setRefreshing(false);
                 }
@@ -96,8 +106,7 @@ public class MainActivity extends AppCompatActivity implements RecyclerViewAdapt
                 }
             }
         });
-        rcAdapter = new RecyclerViewAdapter(context, rowListItem,this);
-        rView.setAdapter(rcAdapter);
+
         if (InternetReceiver.isConnected()) {
             progressDialog.setMessage(getString(R.string.pleaseWait));
             progressDialog.show();
@@ -119,44 +128,79 @@ public class MainActivity extends AppCompatActivity implements RecyclerViewAdapt
         SearchManager searchManager = (SearchManager) getSystemService(Context.SEARCH_SERVICE);
         searchView = (SearchView) menu.findItem(R.id.action_search)
                 .getActionView();
+        ImageView closeButton = (ImageView)searchView.findViewById(R.id.search_close_btn);
         searchView.setSearchableInfo(searchManager
                 .getSearchableInfo(getComponentName()));
         searchView.setMaxWidth(Integer.MAX_VALUE);
+        closeButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                InputMethodManager inputManager = (InputMethodManager)
+                        getSystemService(Context.INPUT_METHOD_SERVICE);
+                inputManager.hideSoftInputFromWindow(getCurrentFocus().getWindowToken(),
+                        InputMethodManager.HIDE_NOT_ALWAYS);
 
-        // listening to search query text change
+                if (!searchView.isIconified()) {
+                    searchView.setIconified(true);
+                    return;
+                }
+                //recreate();
+            }
+        });
+
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String query) {
                 // filter recycler view when query submitted
-                if (query.equals("")){
-                    InputMethodManager inputManager = (InputMethodManager)
-                            getSystemService(Context.INPUT_METHOD_SERVICE);
 
-                    inputManager.hideSoftInputFromWindow(getCurrentFocus().getWindowToken(),
-                            InputMethodManager.HIDE_NOT_ALWAYS);
-                    searchView.setIconified(true);
-                }
-                else {
+//                if (query.equals("")){
+//                    InputMethodManager inputManager = (InputMethodManager)
+//                            getSystemService(Context.INPUT_METHOD_SERVICE);
+//
+//                    inputManager.hideSoftInputFromWindow(getCurrentFocus().getWindowToken(),
+//                            InputMethodManager.HIDE_NOT_ALWAYS);
+//                    searchView.setIconified(true);
+//                    if (!rowListItem.isEmpty()){
+//                        rowListItem.clear();
+//                        rowListItem.addAll(rowListItemCopy);
+//                        rcAdapter.notifyDataSetChanged();
+//                    }
+////                    rowListItem.clear();
+////                    new FetchPhotos(url).execute();
+//
+//                }
+
+
                     rcAdapter.getFilter().filter(query);
 
-                }
+
                 return false;
             }
 
             @Override
             public boolean onQueryTextChange(String query) {
-                if (query.equals("")){
-                    InputMethodManager inputManager = (InputMethodManager)
-                            getSystemService(Context.INPUT_METHOD_SERVICE);
+//                if (query.equals("")){
+//                    InputMethodManager inputManager = (InputMethodManager)
+//                            getSystemService(Context.INPUT_METHOD_SERVICE);
+//
+//                    inputManager.hideSoftInputFromWindow(getCurrentFocus().getWindowToken(),
+//                            InputMethodManager.HIDE_NOT_ALWAYS);
+//                    searchView.setIconified(true);
+//                    if (!rowListItem.isEmpty()){
+//                        rowListItem.clear();
+//                        rowListItem.addAll(rowListItemCopy);
+//                        rcAdapter.notifyDataSetChanged();
+//                    }
+//                    progressDialog.setMessage(getString(R.string.pleaseWait));
+//                    progressDialog.show();
+//                    new FetchPhotos(url).execute();
+//                    //recreate();
+//
+//                }
 
-                    inputManager.hideSoftInputFromWindow(getCurrentFocus().getWindowToken(),
-                            InputMethodManager.HIDE_NOT_ALWAYS);
-                    searchView.setIconified(true);
-                }
-                else {
                     rcAdapter.getFilter().filter(query);
 
-                }
+
                 return false;
             }
         });
@@ -179,13 +223,13 @@ public class MainActivity extends AppCompatActivity implements RecyclerViewAdapt
 
     @Override
     public void onPhotoSelected(ItemObject contact) {
-        Toast.makeText(getApplicationContext(), "Selected: " + contact.getName() + ", " + contact.getName(), Toast.LENGTH_LONG).show();
+        //Toast.makeText(getApplicationContext(), "Selected: " + contact.getName() + ", " + contact.getName(), Toast.LENGTH_LONG).show();
     }
 
     private class FetchPhotos extends AsyncTask<String, Void, String> {
         String photoUrl;
         int count=0;
-        public FetchPhotos(String photoUrl) {
+        FetchPhotos(String photoUrl) {
             this.photoUrl = photoUrl;
         }
 
@@ -230,7 +274,12 @@ public class MainActivity extends AppCompatActivity implements RecyclerViewAdapt
         protected void onPostExecute(String result) {
             Log.d("FirstPage",url);
             progressDialog.dismiss();
-            Log.d("result",result);
+            rowListItem.clear();
+            try {
+                Log.d("result", result);
+            }catch (NullPointerException e){
+                e.printStackTrace();
+            }
             try {
                 JSONObject jsonObject=new JSONObject(result);
                 JSONObject jsonObject1=jsonObject.getJSONObject("photos");
@@ -255,150 +304,18 @@ public class MainActivity extends AppCompatActivity implements RecyclerViewAdapt
                     Log.d("photoUrl",photoUrl);
                     ItemObject itemObject=new ItemObject(title,photoUrl);
                     rowListItem.add(itemObject);
-                    lLayout = new GridLayoutManager(MainActivity.this, 4);
-                    layoutManager= new GridLayoutManager(getApplicationContext(),2);
+                    rowListItemCopy.add(itemObject);
+                    //lLayout = new GridLayoutManager(MainActivity.this, 4);
+                    //new GridLayoutManager(this, 1, GridLayoutManager.HORIZONTAL, false);
 
 
-                    if(MainActivity.this.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT){
-                        rView.setLayoutManager(new GridLayoutManager(context, 2));
-                    }
-                    else{
-                        rView.setLayoutManager(new GridLayoutManager(context, 4));
-                    }
-                    rView.setHasFixedSize(false);
-                    rView.setLayoutManager(layoutManager);
-                    rView.addOnScrollListener(new RecyclerView.OnScrollListener() {
-                        @Override
-                        public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
-                            if (dy > 0) {
-                                visibleItemCount = layoutManager.getChildCount();
-                                totalItemCount = layoutManager.getItemCount();
-                                pastVisibleItems = lLayout.findFirstVisibleItemPosition();
-                                if (loading) {
-                                    if (visibleItemCount  >= totalItemCount) {
-                                        loading = false;
-                                        page++;
-                                        if (page==7){
-                                            Toasty.info(MainActivity.this,getString(R.string.allPhotosAreLoaded),Toast.LENGTH_SHORT).show();
-                                            return;
-                                        }
-                                        //new FetchNextPageFilter(getActivity(), pageno, url).execute();
-                                        new FetchNextPhotos("https://api.flickr.com/services/rest/?method=flickr.interestingness.getList&api_key=9f89151d82e427401680cd48dd2d5cf5&per_page=4&page="+page+"&format=json&nojsoncallback=1").execute();
-                                        Log.d("nextPage","https://api.flickr.com/services/rest/?method=flickr.interestingness.getList&api_key=9f89151d82e427401680cd48dd2d5cf5&per_page=4&page="+page+"&format=json&nojsoncallback=1");
-                                        StyleableToast st = new StyleableToast(MainActivity.this, getString(R.string.loading), Toast.LENGTH_SHORT);
-                                        st.setBackgroundColor(Color.parseColor("#3da6d7"));
-                                        st.setTextColor(Color.WHITE);
-                                        st.setIcon(R.drawable.ic_autorenew_black_24dp);
-                                        st.spinIcon();
-                                        st.setMaxAlpha();
-                                        st.show();
-                                        //Toast.makeText(getActivity(), "Loading!", Toast.LENGTH_SHORT).show();
-                                    }
-                                }
-                            }
-                        }
-                    });
 
 
                 }
                 Log.d("Total",""+count);
-                rView.setAdapter(rcAdapter);
+                rcAdapter.notifyDataSetChanged();
 
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-
-
-        }
-    }
-    private class FetchNextPhotos extends AsyncTask<String, Void, String> {
-        String photoUrl;
-        int count=0;
-        public FetchNextPhotos(String photoUrl) {
-            this.photoUrl = photoUrl;
-        }
-
-        protected String doInBackground(String... urls) {
-            String result;
-            String inputLine;
-
-            try {
-                //Create a URL object holding our url
-                URL myUrl = new URL(url);
-                //Create a connection
-                HttpURLConnection connection =(HttpURLConnection)
-                        myUrl.openConnection();
-                //Set methods and timeouts
-                connection.setRequestMethod("GET");
-
-                //Connect to our url
-                connection.connect();
-                //Create a new InputStreamReader
-                InputStreamReader streamReader = new
-                        InputStreamReader(connection.getInputStream());
-                //Create a new buffered reader and String Builder
-                BufferedReader reader = new BufferedReader(streamReader);
-                StringBuilder stringBuilder = new StringBuilder();
-                //Check if the line we are reading is not null
-                while((inputLine = reader.readLine()) != null){
-                    stringBuilder.append(inputLine);
-                }
-                //Close our InputStream and Buffered reader
-                reader.close();
-                streamReader.close();
-                //Set our result equal to our stringBuilder
-                result = stringBuilder.toString();
-            }
-            catch(IOException e){
-                e.printStackTrace();
-                result = null;
-            }
-            return result;
-        }
-
-        protected void onPostExecute(String result) {
-
-            progressDialog.dismiss();
-            Log.d("result",result);
-            try {
-                JSONObject jsonObject=new JSONObject(result);
-                JSONObject jsonObject1=jsonObject.getJSONObject("photos");
-                JSONArray jsonArray=jsonObject1.getJSONArray("photo");
-                for (int i=0;i<jsonArray.length();i++){
-                    count++;
-                    JSONObject jsonObject2=jsonArray.getJSONObject(i);
-                    String title=jsonObject2.getString("title");
-                    //https://farm{farm-id}.staticflickr.com/{server-id}/{id}_{secret}.jpg
-                    int farm=jsonObject2.getInt("farm");
-                    int server=jsonObject2.getInt("server");
-                    String secret=jsonObject2.getString("secret");
-                    String owner=jsonObject2.getString("owner");
-                    String id=jsonObject2.getString("id");
-                    Log.d("farmn", String.valueOf(farm));
-                    Log.d("server", String.valueOf(server));
-                    Log.d("secret",secret);
-                    Log.d("owner",owner);
-                    Log.d("id",id);
-                    Log.d("Title",title);
-                    String photoUrl="https://farm"+farm+".staticflickr.com/"+server+"/"+id+"_"+secret+".jpg";
-                    Log.d("photoUrl",photoUrl);
-                    ItemObject itemObject=new ItemObject(title,photoUrl);
-                    if (itemObject!=null){
-                        rowListItem.add(itemObject);
-                    }
-
-                    rcAdapter.notifyDataSetChanged();
-                    loading=true;
-
-
-                }
-                Log.d("Total",""+count);
-                String stat=jsonObject.getString("stat");
-
-                Log.d("stat",stat);
-                rView.setAdapter(rcAdapter);
-
-            } catch (JSONException e) {
+            } catch (JSONException | NullPointerException e) {
                 e.printStackTrace();
             }
 
@@ -425,6 +342,9 @@ public class MainActivity extends AppCompatActivity implements RecyclerViewAdapt
         // register connection status listener
         //FaveoApplication.getInstance().setInternetListener(this);
         checkConnection();
+        if (InternetReceiver.isConnected()){
+            new FetchPhotos(url).execute();
+        }
     }
 
     private void checkConnection() {
@@ -494,12 +414,16 @@ public class MainActivity extends AppCompatActivity implements RecyclerViewAdapt
      */
     @Override
     public void onBackPressed() {
-        if (!searchView.isIconified()) {
-            searchView.setIconified(true);
-            if (doubleBackToExitPressedOnce) {
-                super.onBackPressed();
-                return;
-            }
+//        if (!searchView.isIconified()) {
+//            searchView.setIconified(true);
+//            if (doubleBackToExitPressedOnce) {
+//                super.onBackPressed();
+//                return;
+//            }
+//            return;
+//        }
+        if (doubleBackToExitPressedOnce) {
+            super.onBackPressed();
             return;
         }
 
@@ -535,5 +459,29 @@ public class MainActivity extends AppCompatActivity implements RecyclerViewAdapt
         EventBus.getDefault().unregister(this);
         super.onStop();
     }
+
+    @Override
+    protected void onDestroy() {
+        progressDialog.dismiss();
+        super.onDestroy();
+
+    }
+    public void refresh() {
+
+        if (InternetReceiver.isConnected()) {
+//                        loading = true;
+            rView.setVisibility(View.VISIBLE);
+            if (rowListItem.size() != 0) {
+                rowListItem.clear();
+                rcAdapter.notifyDataSetChanged();
+                new FetchPhotos(url).execute();
+            }
+        } else {
+            rView.setVisibility(View.INVISIBLE);
+            swipeRefreshLayout.setRefreshing(false);
+
+        }
+    }
+
 }
 
