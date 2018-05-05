@@ -1,3 +1,5 @@
 editing from git bash
 
 hello new editing
+i want to see it working.
+thats why i am modifying the file from git bash.
