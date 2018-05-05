@@ -1,0 +1,3 @@
+editing from git bash
+
+hello new editing
